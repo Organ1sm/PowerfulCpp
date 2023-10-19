@@ -17,7 +17,8 @@
     #define _LIBPOWERCXX_UNREACHABLE() __builtin_unreachable()
 #else
     #define _LIBPOWERCXX_UNREACHABLE() \
-        do {                           \
+        do                             \
+        {                              \
         } while (1)
 #endif
 
@@ -58,12 +59,14 @@ class Array
 
     void fill(const T &value) noexcept(std::is_nothrow_copy_assignable_v<T>)
     {
-        for (std::size_t i = 0; i < N; i++) m_elements[i] = value;
+        for (std::size_t i = 0; i < N; i++)
+            m_elements[i] = value;
     }
 
     void swap(Array &that) noexcept(std::is_nothrow_swappable_v<T>)
     {
-        for (std::size_t i = 0; i < N; i++) std::swap(m_elements[i], that.m_elements[i]);
+        for (std::size_t i = 0; i < N; i++)
+            std::swap(m_elements[i], that.m_elements[i]);
     }
 
     T &front() noexcept { return m_elements[0]; }
