@@ -1,20 +1,14 @@
 #pragma once
 
-#include <algorithm>
-#include <chrono>
+#include <compare>
 #include <cstddef>
-#include <cstdlib>
-#include <deque>
 #include <format>
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
 #include <limits>
-#include <locale>
 #include <memory>
-#include <regex>
 #include <stdexcept>
-#include <type_traits>
 #include <utility>
 
 template <typename T, typename Alloc = std::allocator<T>>
@@ -159,6 +153,15 @@ struct Vector
         assgin(ilist.begin(), ilist.end());
     }
 
+    ~Vector() noexcept
+    {
+        for (std::size_t i = 0; i != mSize; i++)
+            std::destroy_at(&mData[i]);
+
+        if (mCap != 0)
+            mAlloc.deallocate(mData, mCap);
+    }
+
     void clear() noexcept
     {
         for (std::size_t i = 0; i != mSize; i++)
@@ -172,7 +175,7 @@ struct Vector
             return;
 
         n = std::max(n, mCap * 2);
-        std::cout << std::format("grow from {} to {}", mCap, n);
+        std::cout << std::format("grow from {} to {}\n", mCap, n);
 
         auto oldData = mData;
         auto oldCap  = mCap;
@@ -485,5 +488,74 @@ struct Vector
         mSize += 1;
         std::construct_at(&mData[j], std::move(value));
         return mData + j;
+    }
+
+    T *insert(const T *it, std::size_t n, const T &value)
+    {
+        std::size_t j = it - mData;
+        if (n == 0) [[unlikely]]
+            return const_cast<T *>(it);
+
+        reserve(n + mSize);
+
+        // [j, msize] => [j + n, msize + n]
+        for (std::size_t i = mSize; i != j; i--)
+        {
+            std::construct_at(&mData[i + n - 1], std::move(mData[i - 1]));
+            std::destroy_at(&mData[i - 1]);
+        }
+
+        mSize += n;
+        for (std::size_t i = j; i != j + n; i++)
+            std::construct_at(&mData[i], value);
+
+        return mData + j;
+    }
+
+    template <std::random_access_iterator InputIt>
+    T *insert(const T *it, InputIt first, InputIt last)
+    {
+        std::size_t j = it - mData;
+        std::size_t n = last - first;
+        if (n == 0) [[unlikely]]
+            return const_cast<T *>(it);
+
+        reserve(mSize + n);
+
+        // [j, msize] => [j + n, msize + n]
+        for (std::size_t i = mSize; i != j; i--)
+        {
+            std::construct_at(&mData[i + n - 1], std::move(mData[i - 1]));
+            std::destroy_at(&mData[i - 1]);
+        }
+
+        mSize += n;
+        for (std::size_t i = j; i != j + n; i++)
+        {
+            std::construct_at(&mData[i], *first);
+            ++first;
+        }
+
+        return mData + j;
+    }
+
+    T *insert(const T *it, std::initializer_list<T> ilist)
+    {
+        return insert(it, ilist.begin(), ilist.end());
+    }
+
+    Alloc get_allocator() const noexcept { return mAlloc; }
+
+    bool operator==(const Vector &that) noexcept
+    {
+        return std::equal(begin(), end(), that.begin(), that.end());
+    }
+
+    auto operator<=>(const Vector &that) noexcept
+    {
+        return std::lexicographical_compare_three_way(begin(),
+                                                      end(),
+                                                      that.begin(),
+                                                      that.end());
     }
 };
