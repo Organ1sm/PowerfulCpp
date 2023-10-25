@@ -1,8 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <deque>
 #include <initializer_list>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <utility>
@@ -61,7 +63,7 @@ struct List
   private:
     using ListNode = ListBaseNode<T>;
     using AllocNode =
-            std::allocator_traits<Alloc>::template rebindAlloc<ListValueNode<T>>;
+            std::allocator_traits<Alloc>::template rebind_alloc<ListValueNode<T>>;
 
     ListNode mDummy;
     std::size_t mSize;
@@ -269,6 +271,8 @@ struct List
             ++first;
             ++mSize;
         }
+        mDummy.prev = prev;
+        prev->next  = &mDummy;
     }
 
     void uninitAssign(std::size_t n)
@@ -305,5 +309,325 @@ struct List
         mDummy.prev = prev;
         prev->next  = &mDummy;
         mSize       = n;
+    }
+
+  public:
+
+    struct iterator
+    {
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type        = T;
+        using difference_type   = std::ptrdiff_t;
+        using pointer           = T *;
+        using reference         = T &;
+
+      private:
+        ListNode *mCurr;
+
+        friend List;
+
+        explicit iterator(ListNode *curr) noexcept : mCurr(curr) { }
+
+        // ++iterator
+        iterator &operator++() noexcept
+        {
+            mCurr = mCurr->next;
+            return *this;
+        }
+
+        // iterator++
+        iterator operator++(int) noexcept
+        {
+            auto tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        // --iterator
+        iterator &operator--() noexcept
+        {
+            mCurr = mCurr->prev;
+            return *this;
+        }
+
+        // iterator--
+        iterator operator--(int) noexcept
+        {
+            auto tmp = *this;
+            --(*this);
+            return tmp;
+        }
+
+        T &operator*() const noexcept { return mCurr->value(); }
+
+        bool operator!=(const iterator &that) const noexcept
+        {
+            return mCurr != that.mCurr;
+        }
+
+        bool operator==(const iterator &that) const noexcept { return !(*this != that); }
+    };
+
+    struct const_iterator
+    {
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type        = T;
+        using difference_type   = std::ptrdiff_t;
+        using pointer           = const T *;
+        using reference         = const T &;
+
+      private:
+        const ListNode *mCurr;
+
+        friend List;
+
+        explicit const_iterator(const ListNode *curr) noexcept : mCurr(curr) { }
+
+      public:
+        const_iterator() = default;
+
+        const_iterator(iterator that) noexcept : mCurr(that.mCurr) { }
+
+        explicit operator iterator() noexcept
+        {
+            return iterator {const_cast<ListNode *>(mCurr)};
+        }
+
+        // ++iterator
+        const_iterator &operator++() noexcept
+        {
+            mCurr = mCurr->next;
+            return *this;
+        }
+
+        // iterator++
+        const_iterator operator++(int) noexcept
+        {
+            auto tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        // iterator++
+        const_iterator &operator--() noexcept
+        {
+            mCurr = mCurr->next;
+            return *this;
+        }
+
+        // --iterator
+        const_iterator operator--(int) noexcept
+        {
+            auto tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        const T &operator*() const noexcept { return mCurr->value(); }
+
+        bool operator==(const const_iterator &that) const noexcept
+        {
+            return mCurr == that.mCurr;
+        }
+
+        bool operator!=(const const_iterator &that) const noexcept
+        {
+            return !(*this == that);
+        }
+    };
+
+    iterator begin() noexcept { return iterator {mDummy.next}; }
+
+    iterator end() noexcept { return iterator {mDummy.prev}; }
+
+    const_iterator cbegin() const noexcept { return const_iterator {mDummy.next}; }
+
+    const_iterator cend() const noexcept { return const_iterator {mDummy.prev}; }
+
+    const_iterator begin() const noexcept { return cbegin(); }
+
+    const_iterator end() const noexcept { return cend(); }
+
+    using reverse_iterator       = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+
+    reverse_iterator rbegin() noexcept { return std::make_reverse_iterator(end()); }
+
+    reverse_iterator rend() noexcept { return std::make_reverse_iterator(begin()); }
+
+    const_reverse_iterator crbegin() const noexcept
+    {
+        return std::make_reverse_iterator(cend());
+    }
+
+    const_reverse_iterator crend() const noexcept
+    {
+        return std::make_reverse_iterator(cbegin());
+    }
+
+    const_reverse_iterator rbegin() const noexcept { return crbegin(); }
+
+    const_reverse_iterator rend() const noexcept { return crend(); }
+
+    iterator erase(const_iterator pos) noexcept
+    {
+        ListNode *node = const_cast<ListNode *>(pos.mCurr);
+        auto next      = node->next;
+        auto prev      = node->prev;
+        prev->next     = next;
+        next->prev     = prev;
+
+        std::destroy_at(&node->value());
+        --mSize;
+        return iterator {next};
+    }
+
+    iterator erase(const_iterator first, const_iterator last) noexcept
+    {
+        while (first != last)
+            first = erase(first);
+        return iterator(first);
+    }
+
+    void pop_front() noexcept { erase(begin()); }
+
+    void pop_back() noexcept { erase(std::prev(end())); }
+
+    std::size_t remove(const T &value) noexcept
+    {
+        auto first = begin();
+        auto last  = begin();
+
+        std::size_t count = 0;
+        while (first != last)
+        {
+            if (*first == value)
+            {
+                first = erase(first);
+                ++count;
+            }
+            else
+            {
+                ++first;
+            }
+        }
+
+        return count;
+    }
+
+    template <typename Predict>
+    std::size_t remove_if(Predict &&pred) noexcept
+    {
+        auto first = begin();
+        auto last  = begin();
+
+        std::size_t count = 0;
+        while (first != last)
+        {
+            if (pred(*first))
+            {
+                first = erase(first);
+                ++count;
+            }
+            else
+            {
+                ++first;
+            }
+        }
+
+        return count;
+    }
+
+    template <typename... Args>
+    iterator emplace(const_iterator pos, Args &&...args)
+    {
+        ListNode *curr = newNode();
+        ListNode *next = const_cast<ListNode *>(pos.mCurr);
+        ListNode *prev = next->prev;
+
+        curr->prev = prev;
+        prev->next = curr;
+        curr->next = next;
+        next->prev = curr;
+
+        std::construct_at(&curr->value(), std::forward<Args>(args)...);
+        ++mSize;
+
+        return iterator {curr};
+    }
+
+    iterator insert(const_iterator pos, const T &value) { return emplace(pos, value); }
+
+    iterator insert(const_iterator pos, T &&value)
+    {
+        return emplace(pos, std::move(value));
+    }
+
+    iterator insert(const_iterator pos, std::size_t n, const T &value)
+    {
+        auto origin    = pos;
+        bool hadOrigin = false;
+
+        while (n)
+        {
+            pos = emplace(pos, value);
+            if (!hadOrigin)
+            {
+                hadOrigin = true;
+                origin    = pos;
+            }
+            ++pos;
+            --n;
+        }
+
+        return iterator(origin);
+    }
+
+    template <std::input_iterator InputIt>
+    iterator insert(const_iterator pos, InputIt first, InputIt last)
+    {
+        auto origin    = pos;
+        bool hadOrigin = false;
+
+        while (first != last)
+        {
+            pos = emplace(pos, *first);
+            if (!hadOrigin)
+            {
+                hadOrigin = true;
+                origin    = pos;
+            }
+            ++pos;
+            ++first;
+        }
+
+        return iterator(origin);
+    }
+
+    iterator insert(const_iterator pos, std::initializer_list<T> ilist)
+    {
+        return insert(pos, ilist.begin(), ilist.end());
+    }
+
+    void splice(const_iterator pos, List &&that)
+    {
+        insert(pos,
+               std::make_move_iterator(that.begin()),
+               std::make_move_iterator(that.end()));
+    }
+
+    Alloc get_allocator() const { return mAlloc; }
+
+    bool operator==(const List &that) noexcept
+    {
+        return std::equal(begin(), end(), that.begin(), that.end());
+    }
+
+    auto operator<=>(const List &that) noexcept
+    {
+        return std::lexicographical_compare_three_way(begin(),
+                                                      end(),
+                                                      that.begin(),
+                                                      that.end());
     }
 };
